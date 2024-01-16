@@ -11,7 +11,7 @@ exporters:
   prometheus:
     endpoint: "0.0.0.0:9090"
   loki: # Hypothetical, replace with your chosen log exporter
-    endpoint: "http://loki:3100"
+    endpoint: "http://loki:3100/loki/api/v1/push"
 
 service:
   pipelines:

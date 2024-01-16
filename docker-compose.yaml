@@ -10,8 +10,8 @@ services:
       dockerfile: Dockerfile
     environment:
       - OTEL_SERVICE_NAME=${OTEL_SERVICE_NAME:-my-app}
-      - OTEL_ENDPOINT=http://otel-collector:4317/
-      - OTEL_TRACE_GRANULARITY=${CHROMA_OTEL_GRANULARITY:-all}
+      - OTEL_ENDPOINT=${OTEL_ENDPOINT:-http://otel-collector:4317/}
+      - OTEL_TRACE_GRANULARITY=${OTEL_TRACE_GRANULARITY:-all}
     ports:
       - 8085:8080
     networks:
@@ -32,6 +32,7 @@ services:
     image: grafana/grafana:latest
     volumes:
       - grafana_data:/var/lib/grafana
+      - ./config/grafana-datasource.yml:/etc/grafana/provisioning/datasources/datasource.yml
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=admin
     ports:
@@ -54,11 +55,14 @@ services:
       - net
   loki:
     image: grafana/loki:latest
+    volumes:
+      - loki-data:/loki
     ports:
       - "3100:3100"
     networks:
       - net
 volumes:
-  chroma-data:
-    driver: local
   grafana_data:
+    driver: local
+  loki-data:
+    driver: local
