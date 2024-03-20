@@ -95,7 +95,8 @@ class OTELTelemetryClient(object):
 
     def _metrics_init(self):
         global meter_provider
-        exporter = OTLPMetricExporter(endpoint=self.endpoint, headers=self.headers,
+        exporter = OTLPMetricExporter(endpoint=self.endpoint,
+                                      headers=self.headers,
                                       insecure=True)
         reader = PeriodicExportingMetricReader(exporter=exporter, export_interval_millis=1000)
         self.meter_provider = MeterProvider(resource=self.resource, metric_readers=[reader])
@@ -103,7 +104,8 @@ class OTELTelemetryClient(object):
 
     def _logging_init(self):
         self.logger_provider = LoggerProvider(resource=self.resource)
-        otlp_exporter = OTLPLogExporter(endpoint=os.environ.get("OTEL_ENDPOINT", "http://localhost:4317"),
+        otlp_exporter = OTLPLogExporter(endpoint=self.endpoint,
+                                        headers=self.headers,
                                         insecure=True)
         self.logger_provider.add_log_record_processor(BatchLogRecordProcessor(otlp_exporter))
         handler = LoggingHandler(level=logging.INFO, logger_provider=self.logger_provider)

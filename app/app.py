@@ -7,10 +7,35 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
 from app.db import DummyDBService
+from app.exceptions import ItemNotFoundException, ItemAlreadyExistsException
 from app.service import ItemService
 from app.telemetry import OpenTelemetryGranularity, telemetry, OTELTelemetryClient, tracer
 
+
+async def exception_middleware(
+        req: Request, call_next: Callable[[Request], Any]
+) -> Response:
+    with tracer.start_as_current_span("API.middleware") as span:
+        try:
+            return await call_next(req)
+        except ItemNotFoundException as e:
+            exc = e
+            error_code = 404
+        except ItemAlreadyExistsException as e:
+            exc = e
+            error_code = 409
+        except Exception as e:
+            exc = e
+            error_code = 500
+        logger.error(f"API::exception_middleware - {repr(exc)}")
+        trace_id = telemetry.get_current_span_id()
+        span.set_attribute("http_status_code", error_code)
+        return JSONResponse(content={"error": repr(exc), "trace-id": trace_id}, status_code=error_code,
+                            headers={"Trace-Id": trace_id})
+
+
 app = FastAPI()
+app.middleware('http')(exception_middleware)
 telemetry.instrument_fastapi(app, excluded_urls=["/healthz"])
 logger = logging.getLogger(__name__)
 
@@ -41,20 +66,6 @@ def startup_event():
     logger.info("API::startup_complete")
 
 
-@app.middleware("http")
-async def exception_middleware(
-        req: Request, call_next: Callable[[Request], Any]
-) -> Response:
-    with tracer.start_as_current_span("API.middleware") as span:
-        try:
-            return await call_next(req)
-        except Exception as exc:
-            logger.error(f"API::exception_middleware - {repr(exc)}")
-            trace_id = telemetry.get_current_span_id()
-            return JSONResponse(content={"error": repr(exc), "trace-id": trace_id}, status_code=500,
-                                headers={"Trace-Id": trace_id})
-
-
 @app.post("/items/")
 @OTELTelemetryClient.trace_method("API.create_item", OpenTelemetryGranularity.API)
 def create_item(item: str, db=Depends(get_db)):
@@ -67,7 +78,7 @@ def create_item(item: str, db=Depends(get_db)):
 
 @app.get("/items/{item_id}")
 @OTELTelemetryClient.trace_method("API.read_item", OpenTelemetryGranularity.API)
-def read_item(item_id: int, db=Depends(get_db)):
+def read_item(item_id: str, db=Depends(get_db)):
     logger.debug("API::read_item")
     item_service = ItemService(db)
     item = item_service.read_item(item_id)
@@ -77,7 +88,7 @@ def read_item(item_id: int, db=Depends(get_db)):
 
 @app.put("/items/{item_id}")
 @OTELTelemetryClient.trace_method("API.update_item", OpenTelemetryGranularity.API)
-def update_item(item_id: int, item: str, db=Depends(get_db)):
+def update_item(item_id: str, item: str, db=Depends(get_db)):
     logger.debug("API::update_item")
     item_service = ItemService(db)
     updated_item = item_service.update_item(item_id, item)
@@ -87,7 +98,7 @@ def update_item(item_id: int, item: str, db=Depends(get_db)):
 
 @app.delete("/items/{item_id}")
 @OTELTelemetryClient.trace_method("API.delete_item", OpenTelemetryGranularity.API)
-def delete_item(item_id: int, db=Depends(get_db)):
+def delete_item(item_id: str, db=Depends(get_db)):
     logger.debug("API::delete_item")
     item_service = ItemService(db)
     deleted_item = item_service.delete_item(item_id)
